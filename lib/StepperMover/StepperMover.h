@@ -23,10 +23,21 @@ class StepperMover {
   float speed = 100.0f;
 
  private:
-  // Internal configuration constants (kept private)
-  static const uint8_t PULSE_PIN = 32;   // D3
-  static const uint8_t ENABLE_PIN = 12;  // D7 (active LOW)
-  static const uint8_t DIR_PIN = 26;     // D26
+  // Pin configuration based on build environment
+#ifdef CHAIR_MASTER
+  static const uint8_t PULSE_PIN = MASTER_PULSE_PIN;
+  static const uint8_t ENABLE_PIN = MASTER_ENABLE_PIN;
+  static const uint8_t DIR_PIN = MASTER_DIR_PIN;
+#elif defined(CHAIR_SLAVE)
+  static const uint8_t PULSE_PIN = SLAVE_PULSE_PIN;
+  static const uint8_t ENABLE_PIN = SLAVE_ENABLE_PIN;
+  static const uint8_t DIR_PIN = SLAVE_DIR_PIN;
+#else
+  // Default to master pins for backward compatibility
+  static const uint8_t PULSE_PIN = 32;
+  static const uint8_t ENABLE_PIN = 12;
+  static const uint8_t DIR_PIN = 26;
+#endif
   static const uint8_t PULSE_HIGH_DURATION_US = 5;
 };
 

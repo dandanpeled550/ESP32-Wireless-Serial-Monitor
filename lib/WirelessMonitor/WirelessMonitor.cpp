@@ -18,6 +18,7 @@
 `-----'  `------'`--' '--' `--'     `--' `--' `------'
 */
 
+#ifdef CHAIR_MASTER
 // Headers
 #include "WirelessMonitor.h"
 
@@ -31,7 +32,7 @@ WirelessMonitor wm;
 // Constants
 // the adderess serial monitor is available at http://serialmonitor.local -- can
 // be changed in 'embeddedfiles.cpp'
-const char *ssid = "ESP32-AP";
+const char *ssid = "RoboticBarStools";
 const char *password = "12345678";
 const byte DNS_PORT = 53;
 const int ws_port = 81;
@@ -45,7 +46,9 @@ WirelessMonitor::WirelessMonitor()
 void WirelessMonitor::print(const String &message) {
   Serial.println(message);
   logBuffer += message + "<br>";
-  webSocket.broadcastTXT(message.c_str());
+  if (webSocket.connectedClients() > 0) {
+    webSocket.broadcastTXT(message.c_str());
+  }
 }
 void WirelessMonitor::setup() {
   initWiFi();
@@ -75,19 +78,46 @@ void WirelessMonitor::onWebSocketEvent(uint8_t num, WStype_t type,
   if (type == WStype_TEXT) {
     Serial.printf("WebSocket[%u] received: %s\n", num, payload);
   } else if (type == WStype_CONNECTED) {
+    Serial.printf("New web connection established - Client[%u] connected\n", num);
     webSocket.sendTXT(num, logBuffer);
+  } else if (type == WStype_DISCONNECTED) {
+    Serial.printf("Web connection closed - Client[%u] disconnected\n", num);
   }
 }
 
 void WirelessMonitor::initWiFi() {
   WiFi.mode(WIFI_AP);
-  WiFi.softAP(ssid, password);
+  bool result = WiFi.softAP(ssid, password);
+  
+  if (result) {
+    Serial.println("WiFi AP started successfully!");
+    Serial.printf("SSID: %s\n", ssid);
+    Serial.printf("Password: %s\n", password);
+    Serial.printf("AP IP: %s\n", WiFi.softAPIP().toString().c_str());
+  } else {
+    Serial.println("Failed to start WiFi AP!");
+  }
 }
 
 void WirelessMonitor::setupServer() {
-  server.on("/", HTTP_GET, serveIndexHtml);          // Serve the embedded HTML
-  server.on("/style.css", HTTP_GET, serveStyleCss);  // Serve the embedded CSS
-  server.on("/script.js", HTTP_GET, serveScriptJs);  // Serve the embedded JS
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+    Serial.println("HTTP GET request for root page received");
+    Serial.flush(); // Ensure serial output is flushed before HTTP response
+    request->send_P(200, "text/html", captive_html);
+    Serial.println("Sent captive HTML with chair controls");
+  });
+  server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request) {
+    Serial.println("HTTP GET request for CSS received");
+    serveStyleCss(request);
+  });
+  server.on("/script.js", HTTP_GET, [](AsyncWebServerRequest *request) {
+    Serial.println("HTTP GET request for JS received");
+    serveScriptJs(request);
+  });
+  server.on("/monitor", HTTP_GET, [](AsyncWebServerRequest *request) {
+    Serial.println("HTTP GET request for serial monitor received");
+    serveIndexHtml(request);
+  });
   server.on("/rotate", HTTP_GET, [](AsyncWebServerRequest *request) {
     int degrees = 90;  // default degrees
     String direction = "clockwise";  // default direction
@@ -133,6 +163,7 @@ void WirelessMonitor::setupServer() {
   server.addHandler(new CaptivePortalHandler()).setFilter(ON_AP_FILTER);
 
   server.onNotFound([&](AsyncWebServerRequest *request) {
+    Serial.printf("HTTP request for unknown page: %s\n", request->url().c_str());
     request->send(200, "text/html", captive_html);
   });
 }
@@ -164,3 +195,4 @@ void CaptivePortalHandler::handleRequest(AsyncWebServerRequest *request) {
   request->send(200, "text/html", captive_html);
   
 }
+#endif  // CHAIR_MASTER

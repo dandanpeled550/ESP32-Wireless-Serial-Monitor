@@ -1,5 +1,6 @@
 #include "EmbeddedFiles.h"
 
+#ifdef CHAIR_MASTER
 // Define the HTML content
 const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE HTML>
@@ -293,3 +294,4 @@ void serveStyleCss(AsyncWebServerRequest *request) {
 void serveScriptJs(AsyncWebServerRequest *request) {
   request->send_P(200, "application/javascript", script_js);
 }
+#endif  // CHAIR_MASTER

@@ -1,6 +1,7 @@
 #ifndef WIRELESS_MONITOR_H
 #define WIRELESS_MONITOR_H
 
+#ifdef CHAIR_MASTER
 #include <Arduino.h>
 #include <AsyncTCP.h>
 #include <DNSServer.h>
@@ -43,4 +44,5 @@ class CaptivePortalHandler : public AsyncWebHandler {
 // Global instance declaration (define exactly once in WirelessMonitor.cpp)
 extern WirelessMonitor wm;
 
+#endif  // CHAIR_MASTER
 #endif  // WIRELESS_MONITOR_H
