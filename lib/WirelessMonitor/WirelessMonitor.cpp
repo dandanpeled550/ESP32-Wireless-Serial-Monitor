@@ -22,6 +22,11 @@
 #include "WirelessMonitor.h"
 
 #include "EmbeddedFiles.h"
+#include "StepperMover.h"
+
+// Single global instance
+WirelessMonitor wm;
+
 
 // Constants
 // the adderess serial monitor is available at http://serialmonitor.local -- can
@@ -43,15 +48,15 @@ void WirelessMonitor::print(const String &message) {
   webSocket.broadcastTXT(message.c_str());
 }
 void WirelessMonitor::setup() {
-  // Serial.begin(serial_port);
   initWiFi();
   setupServer();
-  initDNS();
-  server.begin();
+    Serial.println("Test started");
+  initDNS(); //responsible for resolving the domain name to the IP address 
+  server.begin(); //responsible for serving the index.html file to clients
   Serial.println("Server started");
-  initmDNS();
+  initmDNS(); //responsible for resolving the domain name to the IP address 
   Serial.println("mDNS responder started");
-  webSocket.begin();
+  webSocket.begin(); //responsible for sending Logs to clients
   webSocket.onEvent(
       [this](uint8_t num, WStype_t type, uint8_t *payload, size_t length) {
         this->onWebSocketEvent(num, type, payload, length);
@@ -83,6 +88,47 @@ void WirelessMonitor::setupServer() {
   server.on("/", HTTP_GET, serveIndexHtml);          // Serve the embedded HTML
   server.on("/style.css", HTTP_GET, serveStyleCss);  // Serve the embedded CSS
   server.on("/script.js", HTTP_GET, serveScriptJs);  // Serve the embedded JS
+  server.on("/rotate", HTTP_GET, [](AsyncWebServerRequest *request) {
+    int degrees = 90;  // default degrees
+    String direction = "clockwise";  // default direction
+    int speedLevel = 5;  // default (1-10 scale)
+
+    if (request->hasParam("degrees")) {
+        degrees = abs(request->getParam("degrees")->value().toInt()); // Always positive
+    }
+    
+    if (request->hasParam("direction")) {
+        direction = request->getParam("direction")->value();
+    }
+    
+    if (request->hasParam("speed")) {
+        speedLevel = request->getParam("speed")->value().toInt();
+        // Clamp to valid range
+        if (speedLevel < 1) speedLevel = 1;
+        if (speedLevel > 10) speedLevel = 10;
+    }
+
+    // Convert degrees to steps: 450 steps = 90 degrees, so steps = degrees * 5
+    int steps = degrees * 5;
+    
+    // Apply direction: clockwise = positive, counter-clockwise = negative
+    if (direction == "counter-clockwise") {
+        steps = -steps;
+    }
+
+    // Convert user speed (1-10) to milliseconds between steps
+    // Speed 10: ~8.3ms per step (3x faster than before)
+    // Speed 1:  ~100ms per step (slowest)
+    // Formula: 108.3 - (speedLevel * 10) = range from 98.3ms to 8.3ms
+    float stepDelay = 108.3 - (speedLevel * 10.0);
+    Stepper.speed = stepDelay;
+
+    Serial.printf("Rotate requested, degrees = %d %s (%d steps), speed = %d (%.1fms/step)\n", 
+                  degrees, direction.c_str(), steps, speedLevel, stepDelay);
+    stepperMove(steps);
+
+    request->send(200, "text/plain", "OK"); 
+  });
 
   server.addHandler(new CaptivePortalHandler()).setFilter(ON_AP_FILTER);
 
@@ -116,4 +162,5 @@ bool CaptivePortalHandler::canHandle(AsyncWebServerRequest *request) {
 void CaptivePortalHandler::handleRequest(AsyncWebServerRequest *request) {
   // Serve a simple HTML page
   request->send(200, "text/html", captive_html);
+  
 }

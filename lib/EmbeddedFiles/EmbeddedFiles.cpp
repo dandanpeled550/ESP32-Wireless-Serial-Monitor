@@ -118,48 +118,164 @@ function onMessage(event) {
 
 )rawliteral";
 const char captive_html[] PROGMEM = R"rawliteral(
-    <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Serial Monitor Connection</title>
-    <style>
-        body {
-            font-family: "Courier New", Courier, monospace;
-            background-color: #121212;
-            color: #e0e0e0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-        }
-        .container {
-            background-color: #1e1e1e;
-            padding: 20px 40px;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-            text-align: center;
-        }
-        h1 {
-            color: #bb86fc;
-        }
-        a {
-            color: #03dac6;
-            text-decoration: none;
-            font-weight: bold;
-        }
-        a:hover {
-            text-decoration: underline;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Robotic Bar Stools Interface</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #1b1f27;
+      --accent: #ff8a00;
+      --text: #f4f4f4;
+      --muted: #8a93a6;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: var(--bg);
+      font-family: "Courier New", Courier, monospace;
+      color: var(--text);
+      padding: 24px;
+    }
+    .card {
+      width: min(480px, 100%);
+      background: var(--panel);
+      border-radius: 16px;
+      padding: 32px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+    }
+    h1 {
+      margin-top: 0;
+      font-size: 1.8rem;
+      color: var(--accent);
+    }
+    p {
+      line-height: 1.5;
+      color: var(--muted);
+    }
+    .instructions {
+      margin: 20px 0;
+      padding: 16px;
+      border: 1px dashed rgba(255, 255, 255, 0.2);
+      border-radius: 12px;
+    }
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: bold;
+    }
+    input, select {
+      width: 100%;
+      padding: 10px 14px;
+      margin-bottom: 16px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: #0f131a;
+      color: var(--text);
+      font-size: 1rem;
+    }
+    small {
+      display: block;
+      margin-top: -12px;
+      margin-bottom: 18px;
+      color: var(--muted);
+    }
+    code {
+      display: block;
+      background: #0f131a;
+      padding: 10px;
+      border-radius: 8px;
+      margin-top: 8px;
+      color: #79ffe1;
+      font-size: 0.95rem;
+    }
+    .cta {
+      margin-top: 12px;
+      display: inline-block;
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: bold;
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Connect to the Wireless Serial Monitor</h1>
-        <p><a href="http://serialmonitor.local"><u>Click here</u></a> to access the serial monitor.</p>
+  <div class="card">
+    <h1>Welcome to the Robotic Bar Stools Interface</h1>
+    <p>In order to control the speed and the rotation of the chair, change the value in the control link.</p>
+
+    <div class="instructions">
+      <strong>Speed (1-10)</strong>
+      <p>Speed 1: 90° rotation takes 20 seconds (slow)<br/>
+         Speed 10: 90° rotation takes 5 seconds (fast)</p>
+      <strong>Rotation</strong>
+      <p>Choose the angle in degrees and direction:<br />
+         Clockwise rotates one way, Counter-Clockwise rotates the opposite way.</p>
     </div>
+
+    <label for="speed">Speed (1-10)</label>
+    <input id="speed" type="number" min="1" max="10" value="5" placeholder="Enter value 1-10" />
+    <small>1 = slowest, 10 = fastest</small>
+
+    <label for="degrees">Degrees</label>
+    <input id="degrees" type="number" min="1" max="360" value="90" placeholder="Degrees to rotate (1-360)" />
+    <small>Rotation angle (always positive)</small>
+
+    <label for="direction">Direction</label>
+    <select id="direction">
+      <option value="clockwise">Clockwise</option>
+      <option value="counter-clockwise">Counter-Clockwise</option>
+    </select>
+    <small>Choose rotation direction</small>
+
+    <p>To invert the stool rotation logic in firmware, modify:</p>
+    <code>boolean dir = (steps &gt; 0);<br/>// to<br/>boolean dir = !(steps &gt; 0);</code>
+
+    <a class="cta" href="http://serialmonitor.local">Open Serial Monitor</a>
+        <button id="rotateBtn">Rotate</button>
+    <p id="status" style="margin-top:10px; color: var(--muted); font-size: 0.9rem;"></p>
+
+    <script>
+      document.getElementById('rotateBtn').addEventListener('click', async () => {
+        const statusEl = document.getElementById('status');
+        const speedInput = document.getElementById('speed');
+        const degreesInput = document.getElementById('degrees');
+        const directionInput = document.getElementById('direction');
+
+        // Get values from inputs
+        let speed = parseInt(speedInput.value) || 5; // default speed 5
+        let degrees = parseInt(degreesInput.value) || 90; // default 90 degrees
+        let direction = directionInput.value || 'clockwise'; // default clockwise
+
+        // Clamp speed to 1-10 range
+        if (speed < 1) speed = 1;
+        if (speed > 10) speed = 10;
+        
+        // Ensure degrees is positive
+        degrees = Math.abs(degrees);
+
+        statusEl.textContent = `Sending rotate command (${degrees}° ${direction}, speed ${speed})...`;
+
+        try {
+          const resp = await fetch(`/rotate?degrees=${degrees}&direction=${direction}&speed=${speed}`);
+          const text = await resp.text();
+          statusEl.textContent = `Response: ${text} (${degrees}° ${direction} at speed ${speed})`;
+        } catch (e) {
+          console.error(e);
+          statusEl.textContent = "Failed to contact ESP32.";
+        }
+      });
+    </script>
+  </div>
+  
 </body>
 </html>
 )rawliteral";

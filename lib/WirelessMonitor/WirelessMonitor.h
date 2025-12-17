@@ -40,4 +40,7 @@ class CaptivePortalHandler : public AsyncWebHandler {
   void handleRequest(AsyncWebServerRequest *request);
 };
 
+// Global instance declaration (define exactly once in WirelessMonitor.cpp)
+extern WirelessMonitor wm;
+
 #endif  // WIRELESS_MONITOR_H
