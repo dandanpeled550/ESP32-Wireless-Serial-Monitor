@@ -35,6 +35,7 @@ public:
     bool checkForCommand();
     String getLastCommand();
     void parseCommand(const String& command, int& steps, float& stepDelay);
+    void maintainConnection(); // Call this in main loop
 #endif
 
 private:
@@ -61,6 +62,12 @@ private:
     volatile int receivedSteps = 0;
     volatile float receivedDelay = 0;
     volatile bool newCommandReceived = false;
+    
+    // Reconnection mechanism
+    unsigned long lastReconnectAttempt = 0;
+    const unsigned long RECONNECT_INTERVAL = 5000; // Try every 5 seconds
+    bool serverStarted = false;
+    void attemptReconnection();
 #endif
 };
 

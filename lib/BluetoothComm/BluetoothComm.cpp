@@ -180,45 +180,30 @@ void BluetoothComm::onStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t inf
 
 #ifdef CHAIR_SLAVE
 void BluetoothComm::beginSlave(const String& deviceName) {
-    // Connect to master's WiFi instead of using Bluetooth
+    // Initialize WiFi for slave mode with persistent reconnection
     WiFi.mode(WIFI_STA);
-    Serial.println("WiFi Slave started");
-    Serial.println("Connecting to master's WiFi: RoboticBarStools");
+    WiFi.setAutoReconnect(true);  // Enable auto-reconnect
+    WiFi.persistent(true);        // Remember WiFi credentials
     
-    WiFi.begin("RoboticBarStools", "12345678");
-    //TODO: add reconnection mechanism
-    int attempts = 0;
-    while (WiFi.status() != WL_CONNECTED && attempts < 20) {
-        delay(500);
-        Serial.print(".");
-        attempts++;
-    }
+    Serial.println("WiFi Slave started with persistent reconnection");
+    Serial.println("Will keep trying to connect to master's WiFi: RoboticBarStools");
     
-    if (WiFi.status() == WL_CONNECTED) {
-        Serial.println("");
-        Serial.println("Connected to master's WiFi!");
-        Serial.print("Slave IP address: ");
-        Serial.println(WiFi.localIP());
-        
-        // Setup HTTP server to receive commands
-        server.on("/execute", HTTP_GET, [this](AsyncWebServerRequest *request) {
-            if (request->hasParam("steps") && request->hasParam("delay")) {
-                receivedSteps = request->getParam("steps")->value().toInt();
-                receivedDelay = request->getParam("delay")->value().toFloat();
-                newCommandReceived = true;
-                
-                Serial.printf("Received WiFi command: %d steps, %.1f ms/step\n", receivedSteps, receivedDelay);
-                request->send(200, "text/plain", "Command received");
-            } else {
-                request->send(400, "text/plain", "Missing parameters");
-            }
-        });
-        
-        server.begin();
-        Serial.println("Slave HTTP server started on /execute");
-    } else {
-        Serial.println("Failed to connect to master's WiFi!");
-    }
+    // Setup HTTP server routes (but don't start yet - will start when connected)
+    server.on("/execute", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        if (request->hasParam("steps") && request->hasParam("delay")) {
+            receivedSteps = request->getParam("steps")->value().toInt();
+            receivedDelay = request->getParam("delay")->value().toFloat();
+            newCommandReceived = true;
+            
+            Serial.printf("Received WiFi command: %d steps, %.1f ms/step\n", receivedSteps, receivedDelay);
+            request->send(200, "text/plain", "Command received");
+        } else {
+            request->send(400, "text/plain", "Missing parameters");
+        }
+    });
+    
+    // Start first connection attempt
+    attemptReconnection();
 }
 
 bool BluetoothComm::checkForCommand() {
@@ -239,5 +224,44 @@ void BluetoothComm::parseCommand(const String& command, int& steps, float& stepD
     stepDelay = receivedDelay;
     
     Serial.printf("Executing command: %d steps, %.1f ms/step\n", steps, stepDelay);
+}
+
+void BluetoothComm::maintainConnection() {
+    // Call this in your main loop to maintain connection
+    unsigned long now = millis();
+    
+    // Check if we need to attempt reconnection
+    if (WiFi.status() != WL_CONNECTED) {
+        if (serverStarted) {
+            Serial.println("✗ WiFi connection lost!");
+            serverStarted = false;
+        }
+        
+        // Attempt reconnection if enough time has passed
+        if (now - lastReconnectAttempt > RECONNECT_INTERVAL) {
+            attemptReconnection();
+        }
+    } else {
+        // Connected - start server if not already started
+        if (!serverStarted) {
+            Serial.println("✓ WiFi connected! Starting HTTP server...");
+            Serial.print("Slave IP address: ");
+            Serial.println(WiFi.localIP());
+            server.begin();
+            serverStarted = true;
+            Serial.println("Slave HTTP server started on /execute");
+        }
+    }
+}
+
+void BluetoothComm::attemptReconnection() {
+    lastReconnectAttempt = millis();
+    
+    Serial.print("⟳ Attempting to connect to RoboticBarStools...");
+    WiFi.begin("RoboticBarStools", "12345678");
+    
+    // Non-blocking check - just initiate connection
+    // maintainConnection() will handle the rest
+    Serial.println(" (connecting...)");
 }
 #endif

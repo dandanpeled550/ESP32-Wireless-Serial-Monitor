@@ -59,7 +59,10 @@ void loop() {
   btComm.checkConnection();
   
 #elif defined(CHAIR_SLAVE)
-  // Slave: Check for incoming Bluetooth commands
+  // Slave: Maintain WiFi connection with persistent reconnection
+  btComm.maintainConnection();
+  
+  // Slave: Check for incoming WiFi commands
   if (btComm.checkForCommand()) {
     String command = btComm.getLastCommand();
     
