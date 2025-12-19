@@ -19,10 +19,11 @@ void setup() {
 #else
   Serial.println("ESP is on (default mode)");
 #endif
-
+  
   // record startup time
   startTime = millis();
 
+  //TODO: check if stepper.begin also compile to slave?
   // Initialize stepper pins and safe states
   Stepper.begin();
 

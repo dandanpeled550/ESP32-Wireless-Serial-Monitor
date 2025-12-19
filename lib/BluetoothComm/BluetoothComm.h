@@ -3,6 +3,10 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
+extern "C" {
+  #include "esp_wifi.h"
+  #include "tcpip_adapter.h"
+}
 
 #ifdef CHAIR_MASTER
 #include <HTTPClient.h>
@@ -39,6 +43,17 @@ private:
     bool slaveConnected = false;
     unsigned long lastConnectionCheck = 0;
     const unsigned long CONNECTION_CHECK_INTERVAL = 5000; // 5 seconds
+    
+    // Hardcoded slave MAC address - replace with your actual slave MAC
+    const String SLAVE_MAC_ADDRESS = "24:0A:C4:XX:XX:XX"; // TODO: Replace XX:XX:XX with actual slave MAC
+    
+    // Helper methods
+    String macToString(const uint8_t* mac);
+    bool isSlaveMAC(const String& mac);
+    String getIPForMAC(const String& targetMAC);
+    void setupWiFiEvents();
+    static void onStationConnected(WiFiEvent_t event, WiFiEventInfo_t info);
+    static void onStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info);
 #endif
 
 #ifdef CHAIR_SLAVE

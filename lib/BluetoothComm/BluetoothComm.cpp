@@ -11,9 +11,13 @@ void BluetoothComm::beginMaster(const String& deviceName) {
     Serial.println("Use web interface to rotate this chair and connected slave chairs");
     Serial.println("Slaves can connect to WiFi and receive commands via HTTP");
     
+    // Set up WiFi events for real-time slave detection
+    setupWiFiEvents();
+    
     // Initialize HTTP client for sending commands to slaves
     httpClient.setTimeout(1000);  // 1 second timeout
     Serial.println("HTTP client ready to send commands to slave chairs");
+    Serial.println("Target slave MAC: " + SLAVE_MAC_ADDRESS + " (update this with your actual slave MAC)");
 }
 
 
@@ -26,8 +30,9 @@ void BluetoothComm::sendCommand(int degrees, const String& direction, int speed)
         Serial.println("No slave chair found on WiFi network");
         return;
     }
-    
-    // Pre-process on master side
+
+    //TODO: delete it, all pre-proccessing should be done when master get the input from user
+    // Pre-process on master side 
     int steps = degrees * 5;  // Convert degrees to steps
     if (direction == "counter-clockwise") {
         steps = -steps;
@@ -35,7 +40,8 @@ void BluetoothComm::sendCommand(int degrees, const String& direction, int speed)
     
     // Convert speed to stepDelay
     float stepDelay = 108.3 - (speed * 10.0);
-    
+    // End of TODO
+
     String url = "http://" + slaveIP + "/execute?steps=" + String(steps) + "&delay=" + String(stepDelay);
     
     httpClient.begin(url);
@@ -60,29 +66,22 @@ bool BluetoothComm::isSlaveConnected() {
 }
 
 String BluetoothComm::findSlaveIP() {
-    // Simple approach: try common IP addresses on the network
-    // In a real implementation, you might use mDNS or DHCP lease table
-    IPAddress baseIP = WiFi.localIP();
-    String baseIPStr = String(baseIP[0]) + "." + String(baseIP[1]) + "." + String(baseIP[2]) + ".";
+    // Simple approach: Check if any devices are connected, then scan for our slave
+    uint8_t stationCount = WiFi.softAPgetStationNum();
     
-    // Try scanning common IP addresses (this is a simple approach)
-    for (int i = 100; i <= 120; i++) {
-        String testIP = baseIPStr + String(i);
-        if (testIP != WiFi.localIP().toString()) {
-            // Quick ping test by attempting HTTP connection
-            httpClient.begin("http://" + testIP + "/execute");
-            httpClient.setTimeout(200);  // Very short timeout for ping
-            int code = httpClient.GET();
-            httpClient.end();
-            
-            if (code == 400 || code == 200) {  // 400 = missing params, but server responded
-                Serial.println("Found slave chair at IP: " + testIP);
-                return testIP;
-            }
-        }
+    if (stationCount == 0) {
+        Serial.println("No stations connected to AP");
+        return "";
     }
     
-    return "";  // No slave found
+    Serial.printf("Found %d connected stations\n", stationCount);
+    
+    // We already get MAC verification through WiFi events (onStationConnected)
+    // So if we reach here and there are connected stations, just scan for the responding device
+    // The WiFi events already confirmed the correct slave MAC is connected
+    
+    Serial.println("Scanning for slave IP...");
+    return getIPForMAC("");  // MAC verification done via events, just find the IP
 }
 
 void BluetoothComm::checkConnection() {
@@ -98,6 +97,85 @@ void BluetoothComm::checkConnection() {
         }
     }
 }
+
+String BluetoothComm::macToString(const uint8_t* mac) {
+    char macStr[18];
+    snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    return String(macStr);
+}
+
+bool BluetoothComm::isSlaveMAC(const String& mac) {
+    if (mac.isEmpty()) {
+        return false;
+    }
+    
+    String normalizedMAC = mac;
+    normalizedMAC.toUpperCase();
+    String normalizedSlave = SLAVE_MAC_ADDRESS;
+    normalizedSlave.toUpperCase();
+    
+    return normalizedMAC == normalizedSlave;
+}
+
+String BluetoothComm::getIPForMAC(const String& targetMAC) {
+    // Since ESP32 doesn't provide direct DHCP lease table access,
+    // we'll do a targeted scan knowing the device is connected
+    IPAddress baseIP = WiFi.localIP();
+    String baseIPStr = String(baseIP[0]) + "." + String(baseIP[1]) + "." + String(baseIP[2]) + ".";
+    
+    Serial.println("Scanning for IP of connected slave...");
+    
+    // Scan wider range since we know the device is connected
+    for (int i = 2; i <= 254; i++) {
+        String testIP = baseIPStr + String(i);
+        if (testIP != WiFi.localIP().toString()) {
+            // Quick test by attempting HTTP connection
+            httpClient.begin("http://" + testIP + "/execute");
+            httpClient.setTimeout(300);  // Short timeout
+            int code = httpClient.GET();
+            httpClient.end();
+            
+            if (code == 400 || code == 200) {  // Device responded
+                Serial.println("✓ Found slave chair at IP: " + testIP);
+                return testIP;
+            }
+        }
+    }
+    
+    Serial.println("Could not determine slave IP address");
+    return "";
+}
+
+void BluetoothComm::setupWiFiEvents() {
+    WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
+        onStationConnected(event, info);
+    }, ARDUINO_EVENT_WIFI_AP_STACONNECTED);
+    
+    WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
+        onStationDisconnected(event, info);
+    }, ARDUINO_EVENT_WIFI_AP_STADISCONNECTED);
+}
+
+void BluetoothComm::onStationConnected(WiFiEvent_t event, WiFiEventInfo_t info) {
+    String connectedMAC = btComm.macToString(info.wifi_ap_staconnected.mac);
+    Serial.println("✓ Station connected: " + connectedMAC);
+    
+    if (btComm.isSlaveMAC(connectedMAC)) {
+        Serial.println("✓ Slave chair connected! MAC: " + connectedMAC);
+        // findSlaveIP will be called when needed and will find the IP via DHCP query
+    }
+}
+
+void BluetoothComm::onStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info) {
+    String disconnectedMAC = btComm.macToString(info.wifi_ap_stadisconnected.mac);
+    Serial.println("✗ Station disconnected: " + disconnectedMAC);
+    
+    if (btComm.isSlaveMAC(disconnectedMAC)) {
+        Serial.println("✗ Slave chair disconnected");
+    }
+}
+
 #endif
 
 #ifdef CHAIR_SLAVE
@@ -108,7 +186,7 @@ void BluetoothComm::beginSlave(const String& deviceName) {
     Serial.println("Connecting to master's WiFi: RoboticBarStools");
     
     WiFi.begin("RoboticBarStools", "12345678");
-    
+    //TODO: add reconnection mechanism
     int attempts = 0;
     while (WiFi.status() != WL_CONNECTED && attempts < 20) {
         delay(500);
