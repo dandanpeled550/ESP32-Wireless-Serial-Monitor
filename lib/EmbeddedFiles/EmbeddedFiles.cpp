@@ -222,6 +222,14 @@ const char captive_html[] PROGMEM = R"rawliteral(
          Clockwise rotates one way, Counter-Clockwise rotates the opposite way.</p>
     </div>
 
+    <label for="chair">Chair Selection</label>
+    <select id="chair">
+      <option value="master">Master Chair (This Chair)</option>
+      <option value="slave">Slave Chair</option>
+      <option value="both">Both Chairs</option>
+    </select>
+    <small>Choose which chair to control</small>
+
     <label for="speed">Speed (1-10)</label>
     <input id="speed" type="number" min="1" max="10" value="5" placeholder="Enter value 1-10" />
     <small>1 = slowest, 10 = fastest</small>
@@ -247,11 +255,13 @@ const char captive_html[] PROGMEM = R"rawliteral(
     <script>
       document.getElementById('rotateBtn').addEventListener('click', async () => {
         const statusEl = document.getElementById('status');
+        const chairInput = document.getElementById('chair');
         const speedInput = document.getElementById('speed');
         const degreesInput = document.getElementById('degrees');
         const directionInput = document.getElementById('direction');
 
         // Get values from inputs
+        let chair = chairInput.value || 'master'; // default master
         let speed = parseInt(speedInput.value) || 5; // default speed 5
         let degrees = parseInt(degreesInput.value) || 90; // default 90 degrees
         let direction = directionInput.value || 'clockwise'; // default clockwise
@@ -263,12 +273,12 @@ const char captive_html[] PROGMEM = R"rawliteral(
         // Ensure degrees is positive
         degrees = Math.abs(degrees);
 
-        statusEl.textContent = `Sending rotate command (${degrees}° ${direction}, speed ${speed})...`;
+        statusEl.textContent = `Sending rotate command to ${chair} chair(s) (${degrees}° ${direction}, speed ${speed})...`;
 
         try {
-          const resp = await fetch(`/rotate?degrees=${degrees}&direction=${direction}&speed=${speed}`);
+          const resp = await fetch(`/rotate?chair=${chair}&degrees=${degrees}&direction=${direction}&speed=${speed}`);
           const text = await resp.text();
-          statusEl.textContent = `Response: ${text} (${degrees}° ${direction} at speed ${speed})`;
+          statusEl.textContent = `Response: ${text} (${chair} chair(s): ${degrees}° ${direction} at speed ${speed})`;
         } catch (e) {
           console.error(e);
           statusEl.textContent = "Failed to contact ESP32.";

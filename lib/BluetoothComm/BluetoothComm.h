@@ -23,7 +23,7 @@ public:
 #ifdef CHAIR_MASTER
     // Master chair functions
     void beginMaster(const String& deviceName = "RoboticChairMaster");
-    void sendCommand(int degrees, const String& direction, int speed);
+    void sendCommand(int steps, float stepDelay);
     bool isSlaveConnected();
     void checkConnection();
     String findSlaveIP();

@@ -22,25 +22,14 @@ void BluetoothComm::beginMaster(const String& deviceName) {
 
 
 
-void BluetoothComm::sendCommand(int degrees, const String& direction, int speed) {
-    // Send command to slave chair via WiFi HTTP request
+void BluetoothComm::sendCommand(int steps, float stepDelay) {
+    // Send pre-processed command to slave chair via WiFi HTTP request
     String slaveIP = findSlaveIP();
     
     if (slaveIP.isEmpty()) {
         Serial.println("No slave chair found on WiFi network");
         return;
     }
-
-    //TODO: delete it, all pre-proccessing should be done when master get the input from user
-    // Pre-process on master side 
-    int steps = degrees * 5;  // Convert degrees to steps
-    if (direction == "counter-clockwise") {
-        steps = -steps;
-    }
-    
-    // Convert speed to stepDelay
-    float stepDelay = 108.3 - (speed * 10.0);
-    // End of TODO
 
     String url = "http://" + slaveIP + "/execute?steps=" + String(steps) + "&delay=" + String(stepDelay);
     
@@ -49,8 +38,8 @@ void BluetoothComm::sendCommand(int degrees, const String& direction, int speed)
     
     if (httpResponseCode == 200) {
         String response = httpClient.getString();
-        Serial.printf("Sent to slave (%s): %d steps, %.1f ms delay (from %d° %s speed %d)\n", 
-                     slaveIP.c_str(), steps, stepDelay, degrees, direction.c_str(), speed);
+        Serial.printf("Sent to slave (%s): %d steps, %.1f ms delay\n", 
+                     slaveIP.c_str(), steps, stepDelay);
         Serial.println("Slave response: " + response);
     } else {
         Serial.printf("Failed to send command to slave chair (%s). HTTP code: %d\n", slaveIP.c_str(), httpResponseCode);

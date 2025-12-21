@@ -1,2 +1,28 @@
 {
+  "todo-tree.general.tags": [
+    "TODO",
+    "FIXME",
+    "BUG",
+    "NOTE",
+    "ESP",
+    "ESP32",
+    "MASTER",
+    "SLAVE"
+  ],
+
+  "todo-tree.highlights.customHighlight": {
+    "TODO": { "icon": "check", "foreground": "#FFD866" },
+    "FIXME": { "icon": "alert", "foreground": "#FF6B6B" },
+    "BUG": { "icon": "bug", "foreground": "#FF5555" },
+  },
+
+  "todo-tree.filtering.excludeGlobs": [
+    "**/.git/**",
+    "**/.pio/**",
+    "**/build/**",
+    "**/dist/**"
+  ],
+
+  "todo-tree.tree.autoRefresh": true,
+  "todo-tree.tree.showScanModeButton": true
 }

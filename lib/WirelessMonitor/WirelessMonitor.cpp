@@ -24,6 +24,7 @@
 
 #include "EmbeddedFiles.h"
 #include "StepperMover.h"
+#include "BluetoothComm.h"
 
 // Single global instance
 WirelessMonitor wm;
@@ -122,6 +123,7 @@ void WirelessMonitor::setupServer() {
     int degrees = 90;  // default degrees
     String direction = "clockwise";  // default direction
     int speedLevel = 5;  // default (1-10 scale)
+    String chair = "master";  // default chair
 
     if (request->hasParam("degrees")) {
         degrees = abs(request->getParam("degrees")->value().toInt()); // Always positive
@@ -137,7 +139,12 @@ void WirelessMonitor::setupServer() {
         if (speedLevel < 1) speedLevel = 1;
         if (speedLevel > 10) speedLevel = 10;
     }
+    
+    if (request->hasParam("chair")) {
+        chair = request->getParam("chair")->value();
+    }
 
+    // Centralized pre-processing on master
     // Convert degrees to steps: 450 steps = 90 degrees, so steps = degrees * 5
     int steps = degrees * 5;
     
@@ -151,13 +158,26 @@ void WirelessMonitor::setupServer() {
     // Speed 1:  ~100ms per step (slowest)
     // Formula: 108.3 - (speedLevel * 10) = range from 98.3ms to 8.3ms
     float stepDelay = 108.3 - (speedLevel * 10.0);
-    Stepper.speed = stepDelay;
 
-    Serial.printf("Rotate requested, degrees = %d %s (%d steps), speed = %d (%.1fms/step)\n", 
-                  degrees, direction.c_str(), steps, speedLevel, stepDelay);
-    stepperMove(steps);
+    Serial.printf("Rotate requested for %s chair(s), degrees = %d %s (%d steps), speed = %d (%.1fms/step)\n", 
+                  chair.c_str(), degrees, direction.c_str(), steps, speedLevel, stepDelay);
 
-    request->send(200, "text/plain", "OK"); 
+    // Command routing based on chair selection
+    if (chair == "master" || chair == "both") {
+        // Execute on master chair (this chair)
+        Stepper.speed = stepDelay;
+        stepperMove(steps);
+        Serial.println("Master chair command executed locally");
+    }
+    
+    if (chair == "slave" || chair == "both") {
+        // Send pre-processed values to slave chair via WiFi
+        btComm.sendCommand(steps, stepDelay);
+        Serial.println("Command sent to slave chair via WiFi");
+    }
+
+    String response = "OK - Command sent to " + chair + " chair(s)";
+    request->send(200, "text/plain", response); 
   });
 
   server.addHandler(new CaptivePortalHandler()).setFilter(ON_AP_FILTER);
