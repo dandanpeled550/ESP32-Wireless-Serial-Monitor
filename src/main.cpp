@@ -26,6 +26,8 @@ void setup() {
   //TODO: check if stepper.begin also compile to slave?
   // Initialize stepper pins and safe states
   Stepper.begin();
+    Serial.println("Master Chair Stepper initialized");
+
 
 #ifdef CHAIR_MASTER
   // Master: Start wireless monitor (WiFi AP, webserver, websocket)
@@ -56,7 +58,10 @@ void loop() {
   wm.loop();
   
   // Check Bluetooth connection status
+  Serial.println("Checking Bluetooth connection to slave...");
   btComm.checkConnection();
+  Serial.println("End Bluetooth connection check");
+
   
 #elif defined(CHAIR_SLAVE)
   // Slave: Maintain WiFi connection with persistent reconnection
@@ -87,6 +92,7 @@ void loop() {
 
   // small delay to yield CPU
   delay(10);
+  Serial.println("Main loop iteration complete");
 }
 
 

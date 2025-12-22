@@ -26,6 +26,7 @@ void StepperMover::begin() {
 }
 
 void StepperMover::move(int steps) {
+  Serial.println("Stepper move Started");
   if (steps == 0) return;
   
   // Reject new moves while already moving
@@ -60,6 +61,7 @@ void StepperMover::update() {
       pulsing = false;
 
       // one step completed
+        Serial.println("one step completed");
       if (remainingSteps > 0) {
         remainingSteps--;
       }

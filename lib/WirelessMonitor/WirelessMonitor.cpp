@@ -164,20 +164,51 @@ void WirelessMonitor::setupServer() {
 
     // Command routing based on chair selection
     if (chair == "master" || chair == "both") {
+      Serial.println("Executing command on master chair locally");
         // Execute on master chair (this chair)
+        Serial.printf("DEBUG: Setting stepper speed to %.1f ms/step\n", stepDelay);
         Stepper.speed = stepDelay;
+        
+        Serial.printf("DEBUG: Calling stepperMove with %d steps\n", steps);
         stepperMove(steps);
+        
+        Serial.printf("DEBUG: Stepper is now %s\n", Stepper.isMoving() ? "MOVING" : "NOT MOVING");
         Serial.println("Master chair command executed locally");
     }
     
-    if (chair == "slave" || chair == "both") {
-        // Send pre-processed values to slave chair via WiFi
-        btComm.sendCommand(steps, stepDelay);
-        Serial.println("Command sent to slave chair via WiFi");
+    else if (chair == "slave" || chair == "both") {
+      Serial.println("Preparing to send command to slave chair via WiFi");
+        // Only check slave status when actually sending command
+        Serial.println("Checking slave status before sending command...");
+        String slaveIP = btComm.findSlaveIP();
+        
+        if (!slaveIP.isEmpty()) {
+            // Send pre-processed values to slave chair via WiFi
+            btComm.sendCommand(steps, stepDelay);
+            Serial.printf("Command sent to slave chair via WiFi at %s\n", slaveIP.c_str());
+        } else {
+            Serial.println("No slave chair found - command not sent");
+        }
     }
 
     String response = "OK - Command sent to " + chair + " chair(s)";
     request->send(200, "text/plain", response); 
+  });
+
+  // Slave status endpoint for web interface (lightweight)
+  server.on("/slave-status", HTTP_GET, [](AsyncWebServerRequest *request) {
+    // Use cached IP only - don't trigger expensive scanning
+    bool isConnected = !btComm.cachedSlaveIP.isEmpty();
+    
+    String jsonResponse = "{";
+    jsonResponse += "\"connected\":" + String(isConnected ? "true" : "false");
+    if (isConnected) {
+      jsonResponse += ",\"ip\":\"" + btComm.cachedSlaveIP + "\"";
+    }
+    jsonResponse += "}";
+    
+    request->send(200, "application/json", jsonResponse);
+    // No debug output to avoid spam
   });
 
   server.addHandler(new CaptivePortalHandler()).setFilter(ON_AP_FILTER);

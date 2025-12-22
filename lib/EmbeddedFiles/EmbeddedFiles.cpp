@@ -206,11 +206,43 @@ const char captive_html[] PROGMEM = R"rawliteral(
       text-decoration: none;
       font-weight: bold;
     }
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      margin-bottom: 20px;
+      padding: 12px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .status-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 10px;
+      animation: pulse 2s infinite;
+    }
+    .status-connected {
+      background: #4ade80;
+    }
+    .status-disconnected {
+      background: #f87171;
+    }
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.5; }
+      100% { opacity: 1; }
+    }
   </style>
 </head>
 <body>
   <div class="card">
     <h1>Welcome to the Robotic Bar Stools Interface</h1>
+    
+    <div class="status-indicator" id="slaveStatus">
+      <div class="status-dot status-disconnected" id="statusDot"></div>
+      <span id="statusText">Checking slave connection...</span>
+    </div>
+    
     <p>In order to control the speed and the rotation of the chair, change the value in the control link.</p>
 
     <div class="instructions">
@@ -245,14 +277,39 @@ const char captive_html[] PROGMEM = R"rawliteral(
     </select>
     <small>Choose rotation direction</small>
 
-    <p>To invert the stool rotation logic in firmware, modify:</p>
-    <code>boolean dir = (steps &gt; 0);<br/>// to<br/>boolean dir = !(steps &gt; 0);</code>
-
     <a class="cta" href="http://serialmonitor.local">Open Serial Monitor</a>
         <button id="rotateBtn">Rotate</button>
     <p id="status" style="margin-top:10px; color: var(--muted); font-size: 0.9rem;"></p>
 
     <script>
+      // Function to update slave connection status
+      async function updateSlaveStatus() {
+        try {
+          const response = await fetch('/slave-status');
+          const data = await response.json();
+          const statusDot = document.getElementById('statusDot');
+          const statusText = document.getElementById('statusText');
+          
+          if (data.connected) {
+            statusDot.className = 'status-dot status-connected';
+            statusText.textContent = `Slave Chair Connected (${data.ip})`;
+          } else {
+            statusDot.className = 'status-dot status-disconnected';
+            statusText.textContent = 'Slave Chair Disconnected';
+          }
+        } catch (error) {
+          console.error('Failed to check slave status:', error);
+          const statusDot = document.getElementById('statusDot');
+          const statusText = document.getElementById('statusText');
+          statusDot.className = 'status-dot status-disconnected';
+          statusText.textContent = 'Status check failed';
+        }
+      }
+      
+      // Check status immediately and then every 3 seconds
+      updateSlaveStatus();
+      setInterval(updateSlaveStatus, 3000);
+      
       document.getElementById('rotateBtn').addEventListener('click', async () => {
         const statusEl = document.getElementById('status');
         const chairInput = document.getElementById('chair');

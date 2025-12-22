@@ -27,6 +27,9 @@ public:
     bool isSlaveConnected();
     void checkConnection();
     String findSlaveIP();
+    
+    // Public access to cached IP for status checks
+    String cachedSlaveIP = ""; // Cache the slave IP to avoid repeated scans
 #endif
 
 #ifdef CHAIR_SLAVE
@@ -46,7 +49,7 @@ private:
     const unsigned long CONNECTION_CHECK_INTERVAL = 5000; // 5 seconds
     
     // Hardcoded slave MAC address - replace with your actual slave MAC
-    const String SLAVE_MAC_ADDRESS = "24:0A:C4:XX:XX:XX"; // TODO: Replace XX:XX:XX with actual slave MAC
+    const String SLAVE_MAC_ADDRESS = "c4:4f:33:08:1a:4d"; // TODO: Replace XX:XX:XX with actual slave MAC
     
     // Helper methods
     String macToString(const uint8_t* mac);

@@ -55,6 +55,30 @@ bool BluetoothComm::isSlaveConnected() {
 }
 
 String BluetoothComm::findSlaveIP() {
+    // If we have a cached IP, verify it's still valid first
+    if (!cachedSlaveIP.isEmpty()) {
+        Serial.println("Checking cached slave IP: " + cachedSlaveIP);
+        
+        // Quick health check to verify slave is still responsive
+        httpClient.begin("http://" + cachedSlaveIP + "/");
+        httpClient.setTimeout(1000);
+        int code = httpClient.GET();
+        String response = httpClient.getString();
+        httpClient.end();
+        
+        if (code == 200 && response.indexOf("RoboticChairSlave") >= 0) {
+            Serial.println("✓ Cached slave IP still valid: " + cachedSlaveIP);
+            return cachedSlaveIP;
+        } else {
+            Serial.println("✗ Cached IP no longer valid, clearing cache");
+            cachedSlaveIP = ""; // Clear invalid cache
+            // Continue to perform new scan below
+        }
+    }
+    
+    // Only perform expensive scan if no cached IP or cache was invalid
+    Serial.println("No valid cached IP - performing full scan");
+    
     // Simple approach: Check if any devices are connected, then scan for our slave
     uint8_t stationCount = WiFi.softAPgetStationNum();
     
@@ -64,13 +88,17 @@ String BluetoothComm::findSlaveIP() {
     }
     
     Serial.printf("Found %d connected stations\n", stationCount);
+    Serial.println("Performing full IP scan for slave...");
     
-    // We already get MAC verification through WiFi events (onStationConnected)
-    // So if we reach here and there are connected stations, just scan for the responding device
-    // The WiFi events already confirmed the correct slave MAC is connected
+    // Perform full scan and cache the result
+    String foundIP = getIPForMAC("");  // MAC verification done via events, just find the IP
     
-    Serial.println("Scanning for slave IP...");
-    return getIPForMAC("");  // MAC verification done via events, just find the IP
+    if (!foundIP.isEmpty()) {
+        cachedSlaveIP = foundIP; // Cache for future use
+        Serial.println("✓ Slave IP cached: " + cachedSlaveIP);
+    }
+    
+    return foundIP;
 }
 
 void BluetoothComm::checkConnection() {
@@ -110,29 +138,47 @@ bool BluetoothComm::isSlaveMAC(const String& mac) {
 String BluetoothComm::getIPForMAC(const String& targetMAC) {
     // Since ESP32 doesn't provide direct DHCP lease table access,
     // we'll do a targeted scan knowing the device is connected
-    IPAddress baseIP = WiFi.localIP();
+    IPAddress baseIP = WiFi.softAPIP();  // Use AP IP, not local IP for master
     String baseIPStr = String(baseIP[0]) + "." + String(baseIP[1]) + "." + String(baseIP[2]) + ".";
     
     Serial.println("Scanning for IP of connected slave...");
+    Serial.println("Master AP IP: " + WiFi.softAPIP().toString());
     
-    // Scan wider range since we know the device is connected
-    for (int i = 2; i <= 254; i++) {
-        String testIP = baseIPStr + String(i);
-        if (testIP != WiFi.localIP().toString()) {
-            // Quick test by attempting HTTP connection
-            httpClient.begin("http://" + testIP + "/execute");
-            httpClient.setTimeout(300);  // Short timeout
-            int code = httpClient.GET();
-            httpClient.end();
-            
-            if (code == 400 || code == 200) {  // Device responded
-                Serial.println("✓ Found slave chair at IP: " + testIP);
-                return testIP;
+    // Give slave time to start its HTTP server after WiFi connection
+    delay(1000);
+    
+    // Try scanning multiple times with longer timeout
+    for (int attempt = 0; attempt < 3; attempt++) {
+        Serial.printf("Scan attempt %d/3\n", attempt + 1);
+        
+        // Scan wider range since we know the device is connected
+        for (int i = 2; i <= 254; i++) {
+            String testIP = baseIPStr + String(i);
+            if (testIP != WiFi.softAPIP().toString()) {  // Compare with AP IP
+                // Test by attempting HTTP connection to health check endpoint
+                httpClient.begin("http://" + testIP + "/");
+                httpClient.setTimeout(1000);  // Longer timeout for slave server startup
+                int code = httpClient.GET();
+                String response = httpClient.getString();
+                httpClient.end();
+                
+                Serial.printf("Testing %s: HTTP %d\n", testIP.c_str(), code);
+                
+                if (code == 200 && response.indexOf("RoboticChairSlave") >= 0) {  // Found our slave
+                    Serial.println("✓ Found slave chair at IP: " + testIP);
+                    Serial.println("Response: " + response);
+                    return testIP;
+                }
             }
+        }
+        
+        if (attempt < 2) {
+            Serial.println("Scan failed, retrying in 2 seconds...");
+            delay(2000);
         }
     }
     
-    Serial.println("Could not determine slave IP address");
+    Serial.println("Could not determine slave IP address after 3 attempts");
     return "";
 }
 
@@ -162,6 +208,7 @@ void BluetoothComm::onStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t inf
     
     if (btComm.isSlaveMAC(disconnectedMAC)) {
         Serial.println("✗ Slave chair disconnected");
+        btComm.cachedSlaveIP = ""; // Clear cached IP when slave disconnects
     }
 }
 
@@ -178,6 +225,12 @@ void BluetoothComm::beginSlave(const String& deviceName) {
     Serial.println("Will keep trying to connect to master's WiFi: RoboticBarStools");
     
     // Setup HTTP server routes (but don't start yet - will start when connected)
+    
+    // Health check endpoint for discovery
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send(200, "text/plain", "RoboticChairSlave Ready");
+    });
+    
     server.on("/execute", HTTP_GET, [this](AsyncWebServerRequest *request) {
         if (request->hasParam("steps") && request->hasParam("delay")) {
             receivedSteps = request->getParam("steps")->value().toInt();
