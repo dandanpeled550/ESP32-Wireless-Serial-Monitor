@@ -24,12 +24,7 @@ void BluetoothComm::beginMaster(const String& deviceName) {
 
 void BluetoothComm::sendCommand(int steps, float stepDelay) {
     // Send pre-processed command to slave chair via WiFi HTTP request
-    String slaveIP = findSlaveIP();
-    
-    if (slaveIP.isEmpty()) {
-        Serial.println("No slave chair found on WiFi network");
-        return;
-    }
+    String slaveIP = cachedSlaveIP;
 
     String url = "http://" + slaveIP + "/execute?steps=" + String(steps) + "&delay=" + String(stepDelay);
     
@@ -50,34 +45,29 @@ void BluetoothComm::sendCommand(int steps, float stepDelay) {
 
 bool BluetoothComm::isSlaveConnected() {
     // Check if slave is reachable via WiFi
-    String slaveIP = findSlaveIP();
-    return !slaveIP.isEmpty();
+    Serial.println("Checking cached slave IP: " + cachedSlaveIP);
+        
+    // Quick health check to verify slave is still responsive
+    httpClient.begin("http://" + cachedSlaveIP + "/");
+    httpClient.setTimeout(1000);
+    int code = httpClient.GET();
+    String response = httpClient.getString();
+    httpClient.end();
+    
+    if (code == 200 && response.indexOf("RoboticChairSlave") >= 0) {
+        Serial.println("✓ Cached slave IP still valid: " + cachedSlaveIP);
+        return true;
+    } else {
+        Serial.println("✗ Cached IP no longer valid, clearing cache");
+        cachedSlaveIP = ""; // Clear invalid cache
+        // Continue to perform new scan below
+    }
+    return false;
 }
 
-String BluetoothComm::findSlaveIP() {
-    // If we have a cached IP, verify it's still valid first
-    if (!cachedSlaveIP.isEmpty()) {
-        Serial.println("Checking cached slave IP: " + cachedSlaveIP);
-        
-        // Quick health check to verify slave is still responsive
-        httpClient.begin("http://" + cachedSlaveIP + "/");
-        httpClient.setTimeout(1000);
-        int code = httpClient.GET();
-        String response = httpClient.getString();
-        httpClient.end();
-        
-        if (code == 200 && response.indexOf("RoboticChairSlave") >= 0) {
-            Serial.println("✓ Cached slave IP still valid: " + cachedSlaveIP);
-            return cachedSlaveIP;
-        } else {
-            Serial.println("✗ Cached IP no longer valid, clearing cache");
-            cachedSlaveIP = ""; // Clear invalid cache
-            // Continue to perform new scan below
-        }
-    }
-    
+String BluetoothComm::findSlaveIP() {    
     // Only perform expensive scan if no cached IP or cache was invalid
-    Serial.println("No valid cached IP - performing full scan");
+    Serial.println("Starting slave IP discovery...");
     
     // Simple approach: Check if any devices are connected, then scan for our slave
     uint8_t stationCount = WiFi.softAPgetStationNum();
@@ -105,10 +95,8 @@ void BluetoothComm::checkConnection() {
     unsigned long now = millis();
     if (now - lastConnectionCheck > CONNECTION_CHECK_INTERVAL) {
         lastConnectionCheck = now;
-        String slaveIP = findSlaveIP();
-        slaveConnected = !slaveIP.isEmpty();
-        if (slaveConnected) {
-            Serial.println("WiFi: Slave chair connected at " + slaveIP);
+        if (isSlaveConnected()) {
+            Serial.println("WiFi: Slave chair connected at " + cachedSlaveIP);
         } else {
             Serial.println("WiFi: No slave chair found on network");
         }
@@ -152,7 +140,7 @@ String BluetoothComm::getIPForMAC(const String& targetMAC) {
         Serial.printf("Scan attempt %d/3\n", attempt + 1);
         
         // Scan wider range since we know the device is connected
-        for (int i = 2; i <= 254; i++) {
+        for (int i = 2; i <= 5; i++) {
             String testIP = baseIPStr + String(i);
             if (testIP != WiFi.softAPIP().toString()) {  // Compare with AP IP
                 // Test by attempting HTTP connection to health check endpoint

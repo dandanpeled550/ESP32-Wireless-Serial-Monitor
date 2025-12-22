@@ -177,28 +177,25 @@ void WirelessMonitor::setupServer() {
     }
     
     else if (chair == "slave" || chair == "both") {
-      Serial.println("Preparing to send command to slave chair via WiFi");
-        // Only check slave status when actually sending command
+        Serial.println("Preparing to send command to slave chair via WiFi");
         Serial.println("Checking slave status before sending command...");
-        String slaveIP = btComm.findSlaveIP();
-        
-        if (!slaveIP.isEmpty()) {
-            // Send pre-processed values to slave chair via WiFi
+
+        if (btComm.isSlaveConnected()) {
             btComm.sendCommand(steps, stepDelay);
-            Serial.printf("Command sent to slave chair via WiFi at %s\n", slaveIP.c_str());
+            Serial.printf("Command sent to slave chair via WiFi at %s\n", btComm.cachedSlaveIP.c_str());
+            request->send(200, "text/plain", "Command sent to slave chair.");
         } else {
             Serial.println("No slave chair found - command not sent");
+            request->send(500, "text/plain", "Error: No slave chair connected.");
         }
     }
 
-    String response = "OK - Command sent to " + chair + " chair(s)";
-    request->send(200, "text/plain", response); 
   });
 
   // Slave status endpoint for web interface (lightweight)
   server.on("/slave-status", HTTP_GET, [](AsyncWebServerRequest *request) {
     // Use cached IP only - don't trigger expensive scanning
-    bool isConnected = !btComm.cachedSlaveIP.isEmpty();
+    bool isConnected = btComm.isSlaveConnected();
     
     String jsonResponse = "{";
     jsonResponse += "\"connected\":" + String(isConnected ? "true" : "false");
@@ -211,6 +208,22 @@ void WirelessMonitor::setupServer() {
     // No debug output to avoid spam
   });
 
+  // New endpoint to trigger reconnection to slave
+  server.on("/trigger-reconnect", HTTP_GET, [](AsyncWebServerRequest *request) {
+    Serial.println("User-triggered slave reconnection attempt.");
+
+    String slaveIP = btComm.findSlaveIP();
+    if (!slaveIP.isEmpty()) {
+        btComm.cachedSlaveIP = slaveIP;
+        Serial.println("Slave reconnected successfully at: " + slaveIP);
+        request->send(200, "text/plain", "Slave reconnected successfully at: " + slaveIP);
+    } else {
+        Serial.println("Failed to reconnect to slave.");
+        request->send(500, "text/plain", "Error: Failed to reconnect to slave.");
+    }
+});
+
+  //TODO: add an option to triger slave connection from web interface?
   server.addHandler(new CaptivePortalHandler()).setFilter(ON_AP_FILTER);
 
   server.onNotFound([&](AsyncWebServerRequest *request) {

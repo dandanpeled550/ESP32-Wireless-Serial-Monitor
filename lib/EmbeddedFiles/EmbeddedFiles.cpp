@@ -13,6 +13,21 @@ const char index_html[] PROGMEM = R"rawliteral(
 <body>
   <h2>ESP32 Wireless Serial Monitor</h2>
   <div id="serial"></div>
+  <button onclick="triggerReconnect()">Reconnect to Slave</button>
+  <script>
+    function triggerReconnect() {
+      fetch('/trigger-reconnect')
+        .then(response => {
+          if (response.ok) {
+            return response.text();
+          } else {
+            throw new Error('Failed to reconnect to slave');
+          }
+        })
+        .then(message => alert(message))
+        .catch(error => alert(error.message));
+    }
+  </script>
 </body>
 </html>
 )rawliteral";
