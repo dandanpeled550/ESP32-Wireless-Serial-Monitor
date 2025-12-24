@@ -8,9 +8,8 @@ extern "C" {
   #include "tcpip_adapter.h"
 }
 
-#ifdef CHAIR_MASTER
+
 #include <HTTPClient.h>
-#endif
 
 #ifdef CHAIR_SLAVE
 #include <ESPAsyncWebServer.h>
@@ -20,6 +19,7 @@ class BluetoothComm {
 public:
     BluetoothComm();
     
+
 #ifdef CHAIR_MASTER
     // Master chair functions
     void beginMaster(const String& deviceName = "RoboticChairMaster");
@@ -27,9 +27,12 @@ public:
     bool isSlaveConnected();
     void checkConnection();
     String findSlaveIP();
-    
+
     // Public access to cached IP for status checks
     String cachedSlaveIP = ""; // Cache the slave IP to avoid repeated scans
+
+    // Hardcoded slave MAC address - replace with your actual slave MAC
+    const String SLAVE_MAC_ADDRESS = "c4:4f:33:08:1a:4d"; // TODO: Replace XX:XX:XX with actual slave MAC
 #endif
 
 #ifdef CHAIR_SLAVE
@@ -39,6 +42,10 @@ public:
     String getLastCommand();
     void parseCommand(const String& command, int& steps, float& stepDelay);
     void maintainConnection(); // Call this in main loop
+    void maintainMasterConnection(); // Call this in main loop to trigger slave announcement
+    void announceToMaster(); // Actually send the POST to master
+    // Connection status to master
+    bool isConnectedToMaster = false;
 #endif
 
 private:
@@ -47,10 +54,7 @@ private:
     bool slaveConnected = false;
     unsigned long lastConnectionCheck = 0;
     const unsigned long CONNECTION_CHECK_INTERVAL = 5000; // 5 seconds
-    
-    // Hardcoded slave MAC address - replace with your actual slave MAC
-    const String SLAVE_MAC_ADDRESS = "c4:4f:33:08:1a:4d"; // TODO: Replace XX:XX:XX with actual slave MAC
-    
+
     // Helper methods
     String macToString(const uint8_t* mac);
     bool isSlaveMAC(const String& mac);

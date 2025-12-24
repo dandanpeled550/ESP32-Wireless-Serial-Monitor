@@ -18,6 +18,7 @@ class WirelessMonitor {
   void setup();
   void loop();
 
+
  private:
   DNSServer dnsServer;
   AsyncWebServer server;
@@ -41,8 +42,14 @@ class CaptivePortalHandler : public AsyncWebHandler {
   void handleRequest(AsyncWebServerRequest *request);
 };
 
+
+
+
 // Global instance declaration (define exactly once in WirelessMonitor.cpp)
 extern WirelessMonitor wm;
+  // WiFi credentials (defined in WirelessMonitor.cpp, visible to all)
+  extern const char *ssid;
+  extern const char *password;
 
 #endif  // CHAIR_MASTER
 #endif  // WIRELESS_MONITOR_H

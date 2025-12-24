@@ -1,3 +1,6 @@
+
+
+
 #ifdef CHAIR_MASTER
 // Headers
 #include "WirelessMonitor.h"
@@ -9,16 +12,17 @@
 // Single global instance
 WirelessMonitor wm;
 
-
 // Constants
 // the adderess serial monitor is available at http://serialmonitor.local -- can
 // be changed in 'embeddedfiles.cpp'
-const char *ssid = "RoboticBarStools";
-const char *password = "milabspirit";
 const byte DNS_PORT = 53;
 const int ws_port = 81;
 const int server_port = 80;
 const int serial_port = 9600;
+// WiFi credentials (global, visible to both master and slave)
+const char *ssid = "RoboticBarStools";
+const char *password = "milabspirit";
+
 
 // Wireless Monitor Class Implementation
 WirelessMonitor::WirelessMonitor()
@@ -98,6 +102,29 @@ void WirelessMonitor::setupServer() {
   server.on("/monitor", HTTP_GET, [](AsyncWebServerRequest *request) {
     Serial.println("HTTP GET request for serial monitor received");
     serveIndexHtml(request);
+  });
+ server.on("/hello", HTTP_GET, [](AsyncWebServerRequest *request) {
+    Serial.println("HTTP GET request for /hello received");
+    if (!request->hasParam("mac") || !request->hasParam("ip")) {
+        request->send(400, "text/plain", "missing mac or ip");
+        return;
+    }
+
+    String mac = request->getParam("mac")->value();
+    mac.toUpperCase();
+
+    IPAddress ip;
+    if (!ip.fromString(request->getParam("ip")->value())) {
+        request->send(400, "text/plain", "invalid ip");
+        return;
+    }
+    
+    Serial.printf("✓ HELLO from %s at %s\n",
+                  mac.c_str(),
+                  ip.toString().c_str());
+    Serial.println("IP Address received from slave chair." + ip.toString());
+    request->send(200, "text/plain", "hello registered");
+    btComm.cachedSlaveIP = ip.toString();
   });
   server.on("/rotate", HTTP_GET, [](AsyncWebServerRequest *request) {
     static uint32_t rotateReqId = 0;

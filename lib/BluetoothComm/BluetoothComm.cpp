@@ -64,6 +64,7 @@ bool BluetoothComm::isSlaveConnected() {
     }
     return false;
 }
+    
 
 String BluetoothComm::findSlaveIP() {    
     // Only perform expensive scan if no cached IP or cache was invalid
@@ -280,15 +281,52 @@ void BluetoothComm::maintainConnection() {
             server.begin();
             serverStarted = true;
             Serial.println("Slave HTTP server started on /execute");
+
+            // Announce to master after server is up
+            announceToMaster();
         }
+
+        }
+    }   
+
+    void BluetoothComm::announceToMaster() {
+        // Default ESP32 SoftAP gateway IP
+        const char* masterIP = "192.168.4.1";
+        String url = String("http://") + masterIP + "/hello";
+
+            // Build application/x-www-form-urlencoded body
+        String mac = WiFi.macAddress();
+        mac.toUpperCase();
+
+        String ip = WiFi.localIP().toString();
+        String payload = "mac=" + mac + "&ip=" + ip;
+
+        url = url + "?" + payload;
+
+        HTTPClient client;
+        client.begin(url);
+        //client.addHeader("Content-Type", "application/x-www-form-urlencoded");
+
+        Serial.println("Announcing to master: " + url);
+        Serial.println("Payload: " + payload);
+
+        int httpResponseCode = client.GET();
+
+        if (httpResponseCode > 0) {
+            Serial.printf("Announced to master (HTTP %d)\n", httpResponseCode);
+            String resp = client.getString();
+            //Serial.println("Master response: " + resp);
+        } else {
+            Serial.printf("Failed to announce to master: %d\n", httpResponseCode);
+        }
+    client.end();
     }
-}
 
 void BluetoothComm::attemptReconnection() {
     lastReconnectAttempt = millis();
     
     Serial.print("⟳ Attempting to connect to RoboticBarStools...");
-    WiFi.begin("RoboticBarStools", "12345678");
+    WiFi.begin("RoboticBarStools", "milabspirit");
     
     // Non-blocking check - just initiate connection
     // maintainConnection() will handle the rest
