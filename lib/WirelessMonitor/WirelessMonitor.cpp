@@ -1,23 +1,3 @@
-/**
-   (`\ .-') /`       _  .-')     ('-.              ('-.    .-')     .-') .-')
-('-.  _  .-')             ('-.
-   `.( OO ),'      ( \( -O )  _(  OO)           _(  OO)  ( OO ).  ( OO ). ( OO
-).  _(  OO)( \( -O )           ( OO ).-.
-,--./  .--.  ,-.-') ,------. (,------.,--.     (,------.(_)---\_)(_)---\_)
-(_)---\_)(,------.,------.  ,-.-')   / . --. / ,--. |      |  |  |  |OO)|   /`.
-' |  .---'|  |.-')  |  .---'/    _ | /    _ |       /    _ |  |  .---'|   /`. '
-|  |OO)  | \-.  \  |  |.-') |  |   |  |, |  |  \|  /  | | |  |    |  | OO ) |  |
-\  :` `. \  :` `.       \  :` `.  |  |    |  /  | | |  |  \.-'-'  |  | |  | OO )
-|  |.'.|  |_)|  |(_/|  |_.' |(|  '--. |  |`-' |(|  '--.  '..`''.) '..`''.)
-'..`''.)(|  '--. |  |_.' | |  |(_/ \| |_.'  | |  |`-' | |         | ,|  |_.'|  .
-'.' |  .--'(|  '---.' |  .--' .-._)   \.-._)   \      .-._)   \ |  .--' |  .
-'.',|  |_.'  |  .-.  |(|  '---.' |   ,'.   |(_|  |   |  |\  \  |  `---.|      |
-|  `---.\       /\       /      \       / |  `---.|  |\  \(_|  |     |  | |  | |
-|
-'--'   '--'  `--'   `--' '--' `------'`------'  `------' `-----'  `-----'
-`-----'  `------'`--' '--' `--'     `--' `--' `------'
-*/
-
 #ifdef CHAIR_MASTER
 // Headers
 #include "WirelessMonitor.h"
@@ -34,7 +14,7 @@ WirelessMonitor wm;
 // the adderess serial monitor is available at http://serialmonitor.local -- can
 // be changed in 'embeddedfiles.cpp'
 const char *ssid = "RoboticBarStools";
-const char *password = "12345678";
+const char *password = "milabspirit";
 const byte DNS_PORT = 53;
 const int ws_port = 81;
 const int server_port = 80;
@@ -120,76 +100,100 @@ void WirelessMonitor::setupServer() {
     serveIndexHtml(request);
   });
   server.on("/rotate", HTTP_GET, [](AsyncWebServerRequest *request) {
-    int degrees = 90;  // default degrees
-    String direction = "clockwise";  // default direction
-    int speedLevel = 5;  // default (1-10 scale)
-    String chair = "master";  // default chair
+    static uint32_t rotateReqId = 0;
+    rotateReqId++;
+
+    // Log once per HTTP request (useful to detect duplicates)
+    String remoteIp = request->client() ? request->client()->remoteIP().toString() : String("?");
+    Serial.printf("[ROTATE HTTP] id=%lu from=%s url=%s\n",
+                  (unsigned long)rotateReqId,
+                  remoteIp.c_str(),
+                  request->url().c_str());
+
+    int degrees = 90;               // default degrees
+    String direction = "clockwise"; // default direction
+    int speedLevel = 5;             // default (1-10 scale)
+    String chair = "master";        // default chair
 
     if (request->hasParam("degrees")) {
         degrees = abs(request->getParam("degrees")->value().toInt()); // Always positive
     }
-    
+
     if (request->hasParam("direction")) {
         direction = request->getParam("direction")->value();
     }
-    
+
     if (request->hasParam("speed")) {
         speedLevel = request->getParam("speed")->value().toInt();
-        // Clamp to valid range
         if (speedLevel < 1) speedLevel = 1;
         if (speedLevel > 10) speedLevel = 10;
     }
-    
+
     if (request->hasParam("chair")) {
         chair = request->getParam("chair")->value();
     }
 
-    // Centralized pre-processing on master
     // Convert degrees to steps: 450 steps = 90 degrees, so steps = degrees * 5
     int steps = degrees * 5;
-    
+
     // Apply direction: clockwise = positive, counter-clockwise = negative
     if (direction == "counter-clockwise") {
         steps = -steps;
     }
 
     // Convert user speed (1-10) to milliseconds between steps
-    // Speed 10: ~8.3ms per step (3x faster than before)
-    // Speed 1:  ~100ms per step (slowest)
-    // Formula: 108.3 - (speedLevel * 10) = range from 98.3ms to 8.3ms
-    float stepDelay = 108.3 - (speedLevel * 10.0);
+    float stepDelay = 108.3f - (speedLevel * 10.0f);
 
-    Serial.printf("Rotate requested for %s chair(s), degrees = %d %s (%d steps), speed = %d (%.1fms/step)\n", 
+    Serial.printf("Rotate requested: chair=%s, degrees=%d, dir=%s, steps=%d, speed=%d (%.1fms/step)\n",
                   chair.c_str(), degrees, direction.c_str(), steps, speedLevel, stepDelay);
 
-    // Command routing based on chair selection
+    // IMPORTANT:
+    // 1) Always send an HTTP response exactly once.
+    // 2) If chair == both, execute BOTH paths (master + slave).
+
+    bool didMaster = false;
+    bool didSlave = false;
+    bool slaveOk = true;
+
+    // Execute on master chair (this chair)
     if (chair == "master" || chair == "both") {
-      Serial.println("Executing command on master chair locally");
-        // Execute on master chair (this chair)
-        Serial.printf("DEBUG: Setting stepper speed to %.1f ms/step\n", stepDelay);
+        didMaster = true;
+        Serial.println("Executing command on master chair locally");
+
         Stepper.speed = stepDelay;
-        
-        Serial.printf("DEBUG: Calling stepperMove with %d steps\n", steps);
         stepperMove(steps);
-        
-        Serial.printf("DEBUG: Stepper is now %s\n", Stepper.isMoving() ? "MOVING" : "NOT MOVING");
+
         Serial.println("Master chair command executed locally");
     }
-    
-    else if (chair == "slave" || chair == "both") {
-        Serial.println("Preparing to send command to slave chair via WiFi");
-        Serial.println("Checking slave status before sending command...");
+
+    // Execute on slave chair (if requested)
+    if (chair == "slave" || chair == "both") {
+        didSlave = true;
+        Serial.println("Preparing to send command to slave chair");
 
         if (btComm.isSlaveConnected()) {
             btComm.sendCommand(steps, stepDelay);
-            Serial.printf("Command sent to slave chair via WiFi at %s\n", btComm.cachedSlaveIP.c_str());
-            request->send(200, "text/plain", "Command sent to slave chair.");
+            Serial.printf("Command sent to slave chair at %s\n", btComm.cachedSlaveIP.c_str());
         } else {
+            slaveOk = false;
             Serial.println("No slave chair found - command not sent");
-            request->send(500, "text/plain", "Error: No slave chair connected.");
         }
     }
 
+    // Build a single response
+    String resp = "OK ";
+    if (didMaster) resp += "master ";
+    if (didSlave) resp += "slave ";
+    resp += "| degrees=" + String(degrees);
+    resp += " dir=" + direction;
+    resp += " speed=" + String(speedLevel);
+
+    if (didSlave && !slaveOk) {
+        request->send(500, "text/plain", "Error: No slave chair connected.");
+        return;
+    }
+
+    request->send(200, "text/plain", resp);
   });
 
   // Slave status endpoint for web interface (lightweight)
@@ -250,7 +254,15 @@ CaptivePortalHandler::CaptivePortalHandler() {}
 CaptivePortalHandler::~CaptivePortalHandler() {}
 
 bool CaptivePortalHandler::canHandle(AsyncWebServerRequest *request) {
-  // Handle all requests
+  String url = request->url();
+  if (url == "/rotate" ||
+      url == "/slave-status" ||
+      url == "/trigger-reconnect" ||
+      url == "/style.css" ||
+      url == "/script.js" ||
+      url == "/monitor") {
+    return false;
+  }
   return true;
 }
 

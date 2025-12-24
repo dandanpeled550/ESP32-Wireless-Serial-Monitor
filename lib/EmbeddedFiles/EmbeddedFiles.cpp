@@ -93,18 +93,64 @@ var gateway = `ws://${window.location.hostname}:81/`;
 var websocket;
 var userScrolled = false;
 
+// Add debounce mechanism to prevent multiple requests
+var isProcessing = false;
+
 window.addEventListener("load", onLoad);
 
 function onLoad(event) {
     initWebSocket();
     var serialDiv = document.getElementById("serial");
-    serialDiv.addEventListener('scroll', function() {
-        if (serialDiv.scrollTop + serialDiv.clientHeight < serialDiv.scrollHeight) {
-            userScrolled = true;
-        } else {
-            userScrolled = false;
-        }
-    });
+    if (serialDiv) {
+        serialDiv.addEventListener('scroll', function() {
+            if (serialDiv.scrollTop + serialDiv.clientHeight < serialDiv.scrollHeight) {
+                userScrolled = true;
+            } else {
+                userScrolled = false;
+            }
+        });
+    }
+
+    // Ensure the rotate button event listener is only attached once
+    var rotateBtn = document.getElementById('rotateBtn');
+    if (rotateBtn) {
+        rotateBtn.removeEventListener('click', rotateHandler); // Remove any existing listener
+        rotateBtn.addEventListener('click', rotateHandler); // Add the new listener
+    }
+}
+
+async function rotateHandler(event) {
+    console.log("rotateHandler called");
+
+    event.preventDefault();
+
+    isProcessing = true; // Set processing flag
+    const statusEl = document.getElementById('status');
+    const chairInput = document.getElementById('chair');
+    const speedInput = document.getElementById('speed');
+    const degreesInput = document.getElementById('degrees');
+    const directionInput = document.getElementById('direction');
+
+    let chair = chairInput.value || 'master';
+    let speed = parseInt(speedInput.value) || 5;
+    let degrees = parseInt(degreesInput.value) || 90;
+    let direction = directionInput.value || 'clockwise';
+
+    if (speed < 1) speed = 1;
+    if (speed > 10) speed = 10;
+    degrees = Math.abs(degrees);
+
+    statusEl.textContent = `Sending rotate command to ${chair} chair(s) (${degrees}° ${direction}, speed ${speed})...`;
+
+    try {
+      console.log("Sending rotate request:", chair, degrees, direction, speed);
+        const resp = await fetch(`/rotate?chair=${chair}&degrees=${degrees}&direction=${direction}&speed=${speed}`);
+        const text = await resp.text();
+        statusEl.textContent = `Response: ${text} (${chair} chair(s): ${degrees}° ${direction} at speed ${speed})`;
+    } catch (e) {
+        console.error(e);
+        statusEl.textContent = "Failed to contact ESP32.";
+    } 
 }
 
 function initWebSocket() {
@@ -126,12 +172,13 @@ function onClose(event) {
 function onMessage(event) {
     console.log(event.data);
     var serialDiv = document.getElementById("serial");
-    serialDiv.innerHTML += event.data + "<br>";
-    if (!userScrolled) {
-        serialDiv.scrollTop = serialDiv.scrollHeight; // Auto-scroll to the bottom
+    if (serialDiv) {
+        serialDiv.innerHTML += event.data + "<br>";
+        if (!userScrolled) {
+            serialDiv.scrollTop = serialDiv.scrollHeight; // Auto-scroll to the bottom
+        }
     }
 }
-
 )rawliteral";
 const char captive_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
@@ -295,70 +342,8 @@ const char captive_html[] PROGMEM = R"rawliteral(
     <a class="cta" href="http://serialmonitor.local">Open Serial Monitor</a>
         <button id="rotateBtn">Rotate</button>
     <p id="status" style="margin-top:10px; color: var(--muted); font-size: 0.9rem;"></p>
-
-    <script>
-      // Function to update slave connection status
-      async function updateSlaveStatus() {
-        try {
-          const response = await fetch('/slave-status');
-          const data = await response.json();
-          const statusDot = document.getElementById('statusDot');
-          const statusText = document.getElementById('statusText');
-          
-          if (data.connected) {
-            statusDot.className = 'status-dot status-connected';
-            statusText.textContent = `Slave Chair Connected (${data.ip})`;
-          } else {
-            statusDot.className = 'status-dot status-disconnected';
-            statusText.textContent = 'Slave Chair Disconnected';
-          }
-        } catch (error) {
-          console.error('Failed to check slave status:', error);
-          const statusDot = document.getElementById('statusDot');
-          const statusText = document.getElementById('statusText');
-          statusDot.className = 'status-dot status-disconnected';
-          statusText.textContent = 'Status check failed';
-        }
-      }
-      
-      // Check status immediately and then every 3 seconds
-      updateSlaveStatus();
-      setInterval(updateSlaveStatus, 3000);
-      
-      document.getElementById('rotateBtn').addEventListener('click', async () => {
-        const statusEl = document.getElementById('status');
-        const chairInput = document.getElementById('chair');
-        const speedInput = document.getElementById('speed');
-        const degreesInput = document.getElementById('degrees');
-        const directionInput = document.getElementById('direction');
-
-        // Get values from inputs
-        let chair = chairInput.value || 'master'; // default master
-        let speed = parseInt(speedInput.value) || 5; // default speed 5
-        let degrees = parseInt(degreesInput.value) || 90; // default 90 degrees
-        let direction = directionInput.value || 'clockwise'; // default clockwise
-
-        // Clamp speed to 1-10 range
-        if (speed < 1) speed = 1;
-        if (speed > 10) speed = 10;
-        
-        // Ensure degrees is positive
-        degrees = Math.abs(degrees);
-
-        statusEl.textContent = `Sending rotate command to ${chair} chair(s) (${degrees}° ${direction}, speed ${speed})...`;
-
-        try {
-          const resp = await fetch(`/rotate?chair=${chair}&degrees=${degrees}&direction=${direction}&speed=${speed}`);
-          const text = await resp.text();
-          statusEl.textContent = `Response: ${text} (${chair} chair(s): ${degrees}° ${direction} at speed ${speed})`;
-        } catch (e) {
-          console.error(e);
-          statusEl.textContent = "Failed to contact ESP32.";
-        }
-      });
-    </script>
   </div>
-  
+  <script src="/script.js"></script>
 </body>
 </html>
 )rawliteral";

@@ -61,7 +61,7 @@ void StepperMover::update() {
       pulsing = false;
 
       // one step completed
-        Serial.println("one step completed");
+        //Serial.println("one step completed");
       if (remainingSteps > 0) {
         remainingSteps--;
       }
@@ -70,7 +70,7 @@ void StepperMover::update() {
         // finished
         moving = false;
         digitalWrite(ENABLE_PIN, HIGH); // disable motor
-        Serial.println("Stepper move complete");
+        //Serial.println("Stepper move complete");
       } else {
         // schedule next step based on speed
         lastStepMillis = millis();

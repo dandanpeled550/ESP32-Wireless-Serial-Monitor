@@ -58,9 +58,9 @@ void loop() {
   wm.loop();
   
   // Check Bluetooth connection status
-  Serial.println("Checking Bluetooth connection to slave...");
+  //Serial.println("Checking Bluetooth connection to slave...");
   btComm.checkConnection();
-  Serial.println("End Bluetooth connection check");
+  //Serial.println("End Bluetooth connection check");
 
   
 #elif defined(CHAIR_SLAVE)
@@ -92,7 +92,7 @@ void loop() {
 
   // small delay to yield CPU
   delay(10);
-  Serial.println("Main loop iteration complete");
+  //Serial.println("Main loop iteration complete");
 }
 
 
